@@ -24,7 +24,6 @@ def last_installed():
         my_cursor.execute("SELECT * FROM Linux_Reinstall ORDER BY last_date ASC")
         return my_cursor.fetchone()
 
-
 def most_installed():
     def last_install():
         conn = sqlite3.connect("tally_db.db")
@@ -34,6 +33,18 @@ def most_installed():
             return my_cursor.fetchone()
 
 
+def add_count_to_existing_entry(table, username):
+    conn = sqlite3.connect(table)
+    my_cursor = conn.cursor()
+    with conn:
+        my_cursor.execute("UPDATE " + table + " SET count = count + 1 WHERE username ='" + username + "';")
+
+def create_row_entry(table, username):
+    conn = sqlite3.connect("tally_db.db")
+    my_cursor = conn.cursor()
+    with conn:
+        my_cursor.execute(
+        f"INSERT INTO " + table + " VALUES ('Test', '" + username + "', '{today}', '{current_time}', 1)")
 
 # Begin Slack commands
 # Command to kick off flow
@@ -82,7 +93,7 @@ def say_hello(client, message):
 
 @app.action("reinstall")
 def action_button_click(client, body, ack, say):
-    global last_user_linux_install, last_date_linux_install, last_time_linux_install, tally
+    linux_reinstall_table = "Linux_Reinstall"
     ack()
     current_user_data = client.users_info(user=body['user']['id'])
     current_user_id = current_user_data['user']['id']
@@ -98,7 +109,7 @@ def action_button_click(client, body, ack, say):
         print(last_install_data)
         print("begin conditions")
         if last_install_data == None:
-            my_cursor.execute(f"INSERT INTO Linux_Reinstall VALUES ('Test', '{current_user_id}', '{today}', '{current_time}', 1)")
+            create_row_entry(table=linux_reinstall_table, username=current_user_id)
             print("new user")
         else:
             last_install_data = last_installed()
@@ -109,14 +120,14 @@ def action_button_click(client, body, ack, say):
                 if last_install_date == today:
                     print("current time:", current_time)
                     print("last time:", last_install_time)
-                    say(f"{current_user_formatted} reinstalled their operating system. They have installed their OS already today--the last time was at {last_time_linux_install}")
+                    say(f"{current_user_formatted} reinstalled their operating system. They have installed their OS already today--the last time was at {last_install_time}")
                     print("new time:", last_install_time)
                     print("same user, same day, ")
                 else:
                     say(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
 
             elif current_user_formatted != last_install_username:
-                say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_user_linux_install}")
+                say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
 
                 print("last user: " + last_install_username)
                 print("current_user != last_install_username")
