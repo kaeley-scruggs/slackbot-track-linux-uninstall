@@ -116,6 +116,10 @@ def action_button_click(client, body, ack, say):
             say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
             print(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
         else:
+            last_install_data = last_installed()
+            last_install_username = last_install_data[1]
+            last_install_date = last_install_data[2]
+            last_install_time = last_install_data[3]
             if last_install_username == current_user_id:
                 if last_install_date == today:
                     add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id)
