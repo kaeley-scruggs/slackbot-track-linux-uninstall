@@ -105,34 +105,31 @@ def action_button_click(client, body, ack, say):
     conn = sqlite3.connect("tally_db.db")
     my_cursor = conn.cursor()
     last_install_data = last_installed()
+    last_install_username = last_install_data[1]
+    last_install_date = last_install_data[2]
+    last_install_time = last_install_data[3]
     with conn:
         print(last_install_data)
         print("begin conditions")
-        if last_install_data == None:
+        if last_install_data is None:
             create_row_entry(table=linux_reinstall_table, username=current_user_id)
-            print("new user")
+            say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
+            print(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
         else:
-            last_install_data = last_installed()
-            last_install_username = last_install_data[1]
-            last_install_date = last_install_data[2]
-            last_install_time = last_install_data[3]
             if last_install_username == current_user_id:
                 if last_install_date == today:
-                    print("current time:", current_time)
-                    print("last time:", last_install_time)
+                    add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id)
                     say(f"{current_user_formatted} reinstalled their operating system. They have installed their OS already today--the last time was at {last_install_time}")
-                    print("new time:", last_install_time)
-                    print("same user, same day, ")
+                    print(f"{current_user_formatted} reinstalled their operating system. They have installed their OS already today--the last time was at {last_install_time}")
                 else:
+                    add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id)
                     say(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
+                    print(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
 
             elif current_user_formatted != last_install_username:
+                add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id)
                 say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
-
-                print("last user: " + last_install_username)
-                print("current_user != last_install_username")
-            else:
-                pass
+                print(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
 
 
 @app.action("clear_tables")
@@ -151,27 +148,6 @@ def action_button_click(body, ack, say):
     print(ack())
     say(f"<@{body['user']['id']}> clicked the button in error.")
 
-## this one works
-'''@app.message("wake me up")
-def say_hello(client, message):
-    if message["channel"] == kaeley_test:
-       print("in correct channel")
-    target_user = message["user"]
-    channel_id = message["channel"]
-    client.chat_postEphemeral(
-        channel=channel_id,
-        text=f"Summer has come and passed <@{message['user']}>",
-        user=target_user,
-        blocks= {
-        "type": "button",
-        "text": {"type": "plain_text",
-                 "text": "Nevermind"},
-            "action_id": "Tevermind",
-        }
-    )
-'''
-
-### does not work
 
 @app.event("message")
 def handle_message_events(body, logger):
