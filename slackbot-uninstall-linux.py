@@ -16,35 +16,32 @@ app = App(token=secrets.slack_bot_token)
 # visit https://tools.slack.dev/bolt-python/api-docs/slack_bolt/kwargs_injection/args.html
 
 # SQL functions:
+def _connect():
+    return sqlite3.connect(secrets.db_path)
 
 def last_installed(table):
-    conn = sqlite3.connect("tally_db.db")
-    my_cursor = conn.cursor()
-    with conn:
+    with _connect() as conn:
+        my_cursor = conn.cursor()
         my_cursor.execute("SELECT * FROM " + table + " ORDER BY last_date ASC")
         return my_cursor.fetchone()
 
 
 def most_installed(table):
-    def last_install():
-        conn = sqlite3.connect("tally_db.db")
+    with _connect() as conn:
         my_cursor = conn.cursor()
-        with conn:
-            my_cursor.execute("SELECT * FROM " + table + " ORDER BY count ASC")
-            return my_cursor.fetchone()
+        my_cursor.execute("SELECT * FROM " + table + " ORDER BY count ASC")
+        return my_cursor.fetchone()
 
 # use parameterized variable substitution in a sqlite3 query to prevent sql injection attacks
 def add_count_to_existing_entry(table, username, date, time):
-    conn = sqlite3.connect(table)
-    my_cursor = conn.cursor()
-    with conn:
+    with _connect() as conn:
+        my_cursor = conn.cursor()
         my_cursor.execute("UPDATE " + table + " SET last_date = ?, last_time = ?, count = count + 1 WHERE username = ?;", (date, time, username,))
 
 
 def create_row_entry(table, username, date, time):
-    conn = sqlite3.connect("tally_db.db")
-    my_cursor = conn.cursor()
-    with conn:
+    with _connect() as conn:
+        my_cursor = conn.cursor()
         my_cursor.execute(
         "INSERT INTO " + table + " VALUES ('Test', ?, ?, ?, 1)", (date, time, username,))
 
@@ -105,10 +102,9 @@ def action_button_click(client, body, ack, say):
     current_datetime = datetime.now()
     today = str(current_datetime.strftime("%F"))
     current_time = str(current_datetime.strftime("%I:%M:%S %p"))
-    conn = sqlite3.connect("tally_db.db")
-    my_cursor = conn.cursor()
     last_install_data = last_installed(linux_reinstall_table)
-    with conn:
+    with _connect() as conn:
+        my_cursor = conn.cursor()
         print(last_install_data)
         print("begin conditions")
         if last_install_data is None:
@@ -150,9 +146,8 @@ def action_button_click(client, body, ack, say):
 def action_button_click(body, ack, say):
     ack()
     print(f"Tables were cleared")
-    conn = sqlite3.connect("tally_db.db")
-    my_cursor = conn.cursor()
-    with conn:
+    with _connect() as conn:
+        my_cursor = conn.cursor()
         my_cursor.execute("DELETE FROM Linux_Reinstall")
 
 
