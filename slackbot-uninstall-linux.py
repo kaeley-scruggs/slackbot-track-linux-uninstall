@@ -17,34 +17,37 @@ app = App(token=secrets.slack_bot_token)
 
 # SQL functions:
 
-def last_installed():
+def last_installed(table):
     conn = sqlite3.connect("tally_db.db")
     my_cursor = conn.cursor()
     with conn:
-        my_cursor.execute("SELECT * FROM Linux_Reinstall ORDER BY last_date ASC")
+        my_cursor.execute("SELECT * FROM " + table + " ORDER BY last_date ASC")
         return my_cursor.fetchone()
 
-def most_installed():
+
+def most_installed(table):
     def last_install():
         conn = sqlite3.connect("tally_db.db")
         my_cursor = conn.cursor()
         with conn:
-            my_cursor.execute("SELECT * FROM Linux_Reinstall ORDER BY count ASC")
+            my_cursor.execute("SELECT * FROM " + table + " ORDER BY count ASC")
             return my_cursor.fetchone()
 
-
-def add_count_to_existing_entry(table, username):
+# use parameterized variable substitution in a sqlite3 query to prevent sql injection attacks
+def add_count_to_existing_entry(table, username, date, time):
     conn = sqlite3.connect(table)
     my_cursor = conn.cursor()
     with conn:
-        my_cursor.execute("UPDATE " + table + " SET count = count + 1 WHERE username ='" + username + "';")
+        my_cursor.execute("UPDATE " + table + " SET last_date = ?, last_time = ?, count = count + 1 WHERE username = ?;", (date, time, username,))
 
-def create_row_entry(table, username):
+
+def create_row_entry(table, username, date, time):
     conn = sqlite3.connect("tally_db.db")
     my_cursor = conn.cursor()
     with conn:
         my_cursor.execute(
-        f"INSERT INTO " + table + " VALUES ('Test', '" + username + "', '{today}', '{current_time}', 1)")
+        "INSERT INTO " + table + " VALUES ('Test', ?, ?, ?, 1)", (date, time, username,))
+
 
 # Begin Slack commands
 # Command to kick off flow
@@ -100,39 +103,46 @@ def action_button_click(client, body, ack, say):
     current_user_formatted = f"<@{current_user_id}>"
     current_user_display = current_user_data['user']['real_name']
     current_datetime = datetime.now()
-    today = current_datetime.strftime("%F")
-    current_time = current_datetime.time()
+    today = str(current_datetime.strftime("%F"))
+    current_time = str(current_datetime.strftime("%I:%M:%S %p"))
     conn = sqlite3.connect("tally_db.db")
     my_cursor = conn.cursor()
-    last_install_data = last_installed()
-    last_install_username = last_install_data[1]
-    last_install_date = last_install_data[2]
-    last_install_time = last_install_data[3]
+    last_install_data = last_installed(linux_reinstall_table)
     with conn:
         print(last_install_data)
         print("begin conditions")
         if last_install_data is None:
-            create_row_entry(table=linux_reinstall_table, username=current_user_id)
-            say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
-            print(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
+            create_row_entry(table=linux_reinstall_table, username=current_user_id, date=today, time=current_time)
+            say(f"{current_user_formatted} reinstalled their operating system.")
+            print(f"{current_user_formatted} reinstalled their operating system.")
         else:
-            last_install_data = last_installed()
+            last_install_data = last_installed(linux_reinstall_table)
             last_install_username = last_install_data[1]
             last_install_date = last_install_data[2]
             last_install_time = last_install_data[3]
             if last_install_username == current_user_id:
                 if last_install_date == today:
-                    add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id)
-                    say(f"{current_user_formatted} reinstalled their operating system. They have installed their OS already today--the last time was at {last_install_time}")
-                    print(f"{current_user_formatted} reinstalled their operating system. They have installed their OS already today--the last time was at {last_install_time}")
+                    # create_row_entry(table, username, date, time)
+                    add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id, date=today, time=current_time)
+                    say(f"{current_user_formatted} reinstalled their operating system. They also were the last person to reinstall--the last time was today at {last_install_time}")
+                    my_cursor.execute("SELECT * FROM Linux_Reinstall WHERE username='" + current_user_id + "'")
+                    current_user = my_cursor.fetchone()
+                    print(current_user)
+                    print(f"{current_user_formatted} reinstalled their operating system. They also were the last person to reinstall--the last time was today at {last_install_time}")
                 else:
-                    add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id)
+                    add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id, date=today, time=current_time)
                     say(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
+                    my_cursor.execute("SELECT * FROM Linux_Reinstall WHERE username='" + current_user_id + "'")
+                    current_user = my_cursor.fetchone()
+                    print(current_user)
                     print(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
 
             elif current_user_formatted != last_install_username:
-                add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id)
+                add_count_to_existing_entry(table=linux_reinstall_table, username=current_user_id, date=today, time=current_time)
                 say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
+                my_cursor.execute("SELECT * FROM Linux_Reinstall WHERE username='" + current_user_id + "'")
+                current_user = my_cursor.fetchone()
+                print(current_user)
                 print(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is {last_install_username}")
 
 
