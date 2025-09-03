@@ -44,8 +44,9 @@ def create_row_entry(table, display_name, username, date, time,):
     with _connect() as conn:
         my_cursor = conn.cursor()
         my_cursor.execute(
-            "INSERT INTO " + table + " VALUES (display_name = ?, username = ?, last_date = ?, last_time = ?, 1)",
-            (display_name, username, date, time,))
+            "INSERT INTO " + table + " (display_name, username, last_date, last_time, reinstall_count) "
+            "VALUES (?,?,?,?,?)",
+            (display_name, username, date, time, 1))
 
 
 # Begin Slack commands
