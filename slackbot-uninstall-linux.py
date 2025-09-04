@@ -49,6 +49,13 @@ def create_row_entry(table, display_name, username, date, time,):
             (display_name, username, date, time, 1))
 
 
+def find_row_entry(table, username):
+    with _connect() as conn:
+        my_cursor = conn.cursor()
+        my_cursor.execute("SELECT * FROM " + table + " WHERE username = ?", (username,))
+        return my_cursor.fetchone()
+
+
 # Begin Slack commands
 # Command to kick off flow
 @app.message("--helplinux")
@@ -90,7 +97,7 @@ def say_hello(client, message):
                     },
                     {
                         "type": "button",
-                        "text": {"type": "plain_text", "text": "Clear tables"},
+                        "text": {"type": "plain_text", "text": "Print tables"},
                         "action_id": "print_tables"
                     }
                 ]
@@ -103,14 +110,17 @@ def say_hello(client, message):
 def action_button_click(client, body, ack, say):
     linux_reinstall_table = "Linux_Reinstall"
     ack()
+    ######################## active user data ########################
     current_user_data = client.users_info(user=body['user']['id'])
     current_user_id = current_user_data['user']['id']
     current_user_formatted = f"<@{current_user_id}>"
     current_user_display = current_user_data['user']['real_name']
+    ######################## active time data ########################
     current_datetime = datetime.now()
     today = str(current_datetime.strftime("%F"))
     current_time = str(current_datetime.strftime("%I:%M:%S %p"))
     last_install_data = last_installed(linux_reinstall_table)
+    ######################## Open DB connection ########################
     with _connect() as conn:
         my_cursor = conn.cursor()
         print("last install", last_install_data)
@@ -119,26 +129,31 @@ def action_button_click(client, body, ack, say):
             create_row_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
             say(f"{current_user_formatted} reinstalled their operating system.")
             print(f"{current_user_formatted} reinstalled their operating system.")
-        else:
-            last_install_data = last_installed(linux_reinstall_table)
-            last_install_date = last_install_data[1]
-            last_install_time = last_install_data[2]
-            last_install_username = last_install_data[3]
-            if last_install_username == current_user_id:
-                if last_install_date == today:
-                    # create_row_entry(table, username, date, time)
-                    add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-                    say(f"{current_user_formatted} reinstalled their operating system. They also were the last person to reinstall--the last time was today at {last_install_time}")
-                    print(f"{current_user_formatted} reinstalled their operating system. They also were the last person to reinstall--the last time was today at {last_install_time}")
-                else:
-                    add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-                    say(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
-                    print(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
-
-            elif current_user_id != last_install_username:
+        last_install_data = last_installed(linux_reinstall_table)
+        last_install_username = last_install_data[1]
+        last_install_date = last_install_data[2]
+        last_install_time = last_install_data[3]
+        last_install_count = last_install_data[4]
+        print(f"username: {last_install_username}({last_install_data[0]}), last date: {last_install_date}, last time: {last_install_time}")
+        if current_user_id != last_install_username or find_row_entry(table=linux_reinstall_table, username=current_user_id) is None:
+            add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
+            say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall was <@{last_install_username}>")
+            print(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall was <@{last_install_username}>")
+        elif last_install_username == current_user_id:
+            if last_install_date == today:
+                # create_row_entry(table, username, date, time)
                 add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-                say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is ,@<{last_install_username}>")
-                print(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall is @<{last_install_username}>")
+                say(f"{current_user_formatted} reinstalled their operating system." +
+                    " They were also the last person to reinstall at " + str(last_install_time)
+                    + ". Total install count: " + str(last_install_count + 1))
+
+                print(f"{current_user_formatted} reinstalled their operating system. They also were the last person to reinstall--the last time was today at {last_install_time}")
+            else:
+                add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
+                say(f"{current_user_formatted} reinstalled their operating system." +
+                    " They were also the last person to reinstall on " + str(last_install_date)
+                    + ". Total install count: " + str(last_install_count + 1))
+                print(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
 
 
 @app.action("clear_tables")
