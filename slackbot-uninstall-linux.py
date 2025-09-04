@@ -1,12 +1,10 @@
 import datetime
-import os
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 import secrets
-from datetime import date, time, datetime
-import zoneinfo
+from datetime import datetime
 import sqlite3
-import requests
+
 kaeley_test = "G01JE299T6V"
 
 # Initializes your app with your bot token and socket mode handler
@@ -21,7 +19,8 @@ def _connect():
 def last_installed(table):
     with _connect() as conn:
         my_cursor = conn.cursor()
-        my_cursor.execute("SELECT * FROM " + table + " ORDER BY last_date ASC")
+        my_cursor.execute("SELECT * FROM " + table + " ORDER BY last_date DESC")
+        print("last installed in function", my_cursor.fetchone())
         return my_cursor.fetchone()
 
 
@@ -38,6 +37,7 @@ def add_count_to_existing_entry(table, display_name, username, date, time):
         my_cursor.execute(
             "UPDATE " + table + " SET last_date = ?, last_time = ?, reinstall_count =  COALESCE(reinstall_count, 0) + 1 WHERE username = ? AND display_name = ?;",
             (date, time, username, display_name))
+        print("add count to existing row entry", my_cursor.fetchone())
 
 
 def create_row_entry(table, display_name, username, date, time,):
@@ -47,12 +47,14 @@ def create_row_entry(table, display_name, username, date, time,):
             "INSERT INTO " + table + " (display_name, username, last_date, last_time, reinstall_count) "
             "VALUES (?,?,?,?,?)",
             (display_name, username, date, time, 1))
+        print("create row entry", my_cursor.fetchone())
 
 
 def find_row_entry(table, username):
     with _connect() as conn:
         my_cursor = conn.cursor()
         my_cursor.execute("SELECT * FROM " + table + " WHERE username = ?", (username,))
+        print("find row entry", my_cursor.fetchone())
         return my_cursor.fetchone()
 
 
@@ -119,45 +121,44 @@ def action_button_click(client, body, ack, say):
     current_datetime = datetime.now()
     today = str(current_datetime.strftime("%F"))
     current_time = str(current_datetime.strftime("%I:%M:%S %p"))
-    last_install_data = last_installed(linux_reinstall_table)
     ######################## Open DB connection ########################
-    with _connect() as conn:
-        my_cursor = conn.cursor()
-        print("last install", last_install_data)
-        print("begin conditions")
-        if last_install_data is None:
-            create_row_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-            say(f"{current_user_formatted} reinstalled their operating system.")
-            print(f"{current_user_formatted} reinstalled their operating system.")
-        last_install_data = last_installed(linux_reinstall_table)
-        last_install_username = last_install_data[1]
-        last_install_date = last_install_data[2]
-        last_install_time = last_install_data[3]
-        last_install_count = last_install_data[4]
-        print(f"username: {last_install_username}({last_install_data[0]}), last date: {last_install_date}, last time: {last_install_time}")
-        if current_user_id != last_install_username or find_row_entry(table=linux_reinstall_table, username=current_user_id) is None:
+    last_install_data = last_installed(linux_reinstall_table)
+    last_install_username = last_install_data[1]
+    last_install_date = last_install_data[2]
+    last_install_time = last_install_data[3]
+    last_install_count = last_install_data[4]
+    print("last_install_data:", last_install_data)
+    print("begin conditions")
+    if last_install_data is None: # finds none rows
+        create_row_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
+        say(current_user_formatted + " reinstalled their operating system.")
+        print("finds no rows")
+    elif find_row_entry(table=linux_reinstall_table, username=current_user_id) is None: # current user has no entry
+        create_row_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id,
+                         date=today, time=current_time)
+        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was <@" + last_install_username + ">")
+    elif current_user_id != last_install_username: # current user does not match last user
+        add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
+        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was <@" + last_install_username + ">")
+        print("current user does not match last user")
+    elif last_install_username == current_user_id: # current user matches last user
+        if last_install_date == today: # current user matches last user if it was the same day
+            # create_row_entry(table, username, date, time)
             add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-            say(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall was <@{last_install_username}>")
-            print(f"{current_user_formatted} reinstalled their operating system. The last person to reinstall was <@{last_install_username}>")
-        elif last_install_username == current_user_id:
-            if last_install_date == today:
-                # create_row_entry(table, username, date, time)
-                add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-                say(f"{current_user_formatted} reinstalled their operating system." +
-                    " They were also the last person to reinstall at " + str(last_install_time)
-                    + ". Total install count: " + str(last_install_count + 1))
-
-                print(f"{current_user_formatted} reinstalled their operating system. They also were the last person to reinstall--the last time was today at {last_install_time}")
-            else:
-                add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-                say(f"{current_user_formatted} reinstalled their operating system." +
-                    " They were also the last person to reinstall on " + str(last_install_date)
-                    + ". Total install count: " + str(last_install_count + 1))
-                print(f"{current_user_formatted} reinstalled their operating system. They were also the last person to reinstall on " + last_install_date)
+            say(current_user_formatted + " reinstalled their operating system." +
+                " They were also the last person to reinstall at " + str(last_install_time)
+                + ". Total install count: " + str(last_install_count + 1))
+            print("current user matches last user if it was the same day")
+        else: # current user matches last user if it wasn't the same day
+            add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
+            say(current_user_formatted + " reinstalled their operating system." +
+                " They were also the last person to reinstall on " + str(last_install_date)
+                + ". Total install count: " + str(last_install_count + 1))
+            print("current user matches last user if it wasn't the same day")
 
 
 @app.action("clear_tables")
-def action_button_click(body, ack, say):
+def action_button_click(ack):
     ack()
     print(f"Tables were cleared")
     with _connect() as conn:
@@ -165,7 +166,7 @@ def action_button_click(body, ack, say):
         my_cursor.execute("DELETE FROM Linux_Reinstall")
 
 @app.action("print_tables")
-def action_button_click(client, body, ack, say):
+def action_button_click(ack):
     ack()
     with _connect() as conn:
         my_cursor = conn.cursor()
