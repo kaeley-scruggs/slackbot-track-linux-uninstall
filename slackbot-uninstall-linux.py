@@ -54,8 +54,9 @@ def find_row_entry(table, username):
     with _connect() as conn:
         my_cursor = conn.cursor()
         my_cursor.execute("SELECT * FROM " + table + " WHERE username = ?", (username,))
-        print("find row entry", my_cursor.fetchone())
-        return my_cursor.fetchone()
+        find = my_cursor.fetchone()
+        print("find row entry", find)
+        return find
 
 
 # Begin Slack commands
