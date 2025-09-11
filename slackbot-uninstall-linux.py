@@ -20,8 +20,9 @@ def last_installed(table):
     with _connect() as conn:
         my_cursor = conn.cursor()
         my_cursor.execute("SELECT * FROM " + table + " ORDER BY last_date DESC")
-        print("last installed in function", my_cursor.fetchone())
-        return my_cursor.fetchone()
+        find = my_cursor.fetchone()
+        print("last installed in function", find)
+        return find
 
 
 def most_installed(table):
@@ -47,15 +48,16 @@ def create_row_entry(table, display_name, username, date, time,):
             "INSERT INTO " + table + " (display_name, username, last_date, last_time, reinstall_count) "
             "VALUES (?,?,?,?,?)",
             (display_name, username, date, time, 1))
+        my_cursor.execute("SELECT * FROM " + table + " ORDER BY id DESC LIMIT 1")
         print("create row entry", my_cursor.fetchone())
 
 
 def find_row_entry(table, username):
     with _connect() as conn:
         my_cursor = conn.cursor()
-        my_cursor.execute("SELECT * FROM " + table + " WHERE username = ?", (username,))
+        my_cursor.execute("SELECT * FROM " + table + " WHERE username = ? LIMIT 1", (username,))
         find = my_cursor.fetchone()
-        print("find row entry", find)
+        print("find row entry function:", find)
         return find
 
 
@@ -124,38 +126,40 @@ def action_button_click(client, body, ack, say):
     current_time = str(current_datetime.strftime("%I:%M:%S %p"))
     ######################## Open DB connection ########################
     last_install_data = last_installed(linux_reinstall_table)
-    last_install_username = last_install_data[1]
-    last_install_date = last_install_data[2]
-    last_install_time = last_install_data[3]
-    last_install_count = last_install_data[4]
-    print("last_install_data:", last_install_data)
+    print("last install data out of function:", last_install_data)
+    ######################## last install data ########################
+    if last_install_data is not None:
+        last_install_username = last_install_data[1]
+        last_install_date = last_install_data[2]
+        last_install_time = last_install_data[3]
+        last_install_count = last_install_data[4]
     print("begin conditions")
     if last_install_data is None: # finds none rows
+        print("finds no rows")
         create_row_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
         say(current_user_formatted + " reinstalled their operating system.")
-        print("finds no rows")
     elif find_row_entry(table=linux_reinstall_table, username=current_user_id) is None: # current user has no entry
         create_row_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id,
                          date=today, time=current_time)
-        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was <@" + last_install_username + ">")
+        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was @" + last_install_username)
     elif current_user_id != last_install_username: # current user does not match last user
-        add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was <@" + last_install_username + ">")
         print("current user does not match last user")
+        add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
+        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was @" + last_install_username)
     elif last_install_username == current_user_id: # current user matches last user
         if last_install_date == today: # current user matches last user if it was the same day
             # create_row_entry(table, username, date, time)
+            print("current user matches last user if it was the same day")
             add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
             say(current_user_formatted + " reinstalled their operating system." +
                 " They were also the last person to reinstall at " + str(last_install_time)
                 + ". Total install count: " + str(last_install_count + 1))
-            print("current user matches last user if it was the same day")
         else: # current user matches last user if it wasn't the same day
+            print("current user matches last user if it wasn't the same day")
             add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
             say(current_user_formatted + " reinstalled their operating system." +
                 " They were also the last person to reinstall on " + str(last_install_date)
                 + ". Total install count: " + str(last_install_count + 1))
-            print("current user matches last user if it wasn't the same day")
 
 
 @app.action("clear_tables")
