@@ -4,66 +4,101 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 import secrets
 from datetime import datetime
 import sqlite3
-
 kaeley_test = "G01JE299T6V"
 
-# Initializes your app with your bot token and socket mode handler
 app = App(token=secrets.slack_bot_token)
-# Listens to incoming messages that contain "hello"
-# To learn available listener arguments,
-# visit https://tools.slack.dev/bolt-python/api-docs/slack_bolt/kwargs_injection/args.html
-# SQL functions:
+
+
 def _connect():
     return sqlite3.connect(secrets.db_path)
 
-def last_installed(table):
+
+def table_validation(table):
+    approved = False
+    allow_tb_list = ["Linux_Reinstall", "1Password_Recovery"]
+    illegal_char = ["\\", "/", "LIKE", "like"]
+    for char in illegal_char:
+        if char in table:
+            return False
+        if table in allow_tb_list:
+            approved = True
+    return approved
+
+
+def last_installed(table="Linx_Reinstall"):
     with _connect() as conn:
-        my_cursor = conn.cursor()
-        my_cursor.execute("SELECT * FROM " + table + " ORDER BY last_date DESC")
-        find = my_cursor.fetchone()
-        print("last installed in function", find)
-        return find
+        valid_table = table_validation(table)
+        if valid_table is False:
+            print("Table name not valid")
+            exit()
+        elif valid_table is True:
+            my_cursor = conn.cursor()
+            my_cursor.execute("SELECT * FROM " + table + " ORDER BY last_date DESC, last_time DESC")
+            find = my_cursor.fetchone()
+            return find
+        return
 
 
 def most_installed(table):
     with _connect() as conn:
-        my_cursor = conn.cursor()
-        my_cursor.execute("SELECT * FROM " + table + " ORDER BY reinstall_count ASC")
-        return my_cursor.fetchone()
+        valid_table = table_validation(table)
+        if valid_table is False:
+            print("Table name not valid")
+            exit()
+        elif valid_table is True:
+            my_cursor = conn.cursor()
+            my_cursor.execute("SELECT * FROM " + table + " ORDER BY reinstall_count DESC")
+            find = my_cursor.fetchone()
+            return find
+        return
+
 
 # use parameterized variable substitution in a sqlite3 query to prevent sql injection attacks
 def add_count_to_existing_entry(table, display_name, username, date, time):
     with _connect() as conn:
-        my_cursor = conn.cursor()
-        my_cursor.execute(
-            "UPDATE " + table + " SET last_date = ?, last_time = ?, reinstall_count =  COALESCE(reinstall_count, 0) + 1 WHERE username = ? AND display_name = ?;",
-            (date, time, username, display_name))
-        print("add count to existing row entry", my_cursor.fetchone())
+        valid_table = table_validation(table)
+        if valid_table is False:
+            print("Table name not valid")
+            exit()
+        elif valid_table is True:
+            my_cursor = conn.cursor()
+            my_cursor.execute(
+                "UPDATE " + table + " SET last_date = ?, last_time = ?, reinstall_count =  COALESCE(reinstall_count, 0) + 1 WHERE username = ? AND display_name = ?;",
+                (date, time, username, display_name))
 
 
 def create_row_entry(table, display_name, username, date, time,):
     with _connect() as conn:
-        my_cursor = conn.cursor()
-        my_cursor.execute(
-            "INSERT INTO " + table + " (display_name, username, last_date, last_time, reinstall_count) "
-            "VALUES (?,?,?,?,?)",
-            (display_name, username, date, time, 1))
-        my_cursor.execute("SELECT * FROM " + table + " ORDER BY id DESC LIMIT 1")
-        print("create row entry", my_cursor.fetchone())
+        valid_table = table_validation(table)
+        if valid_table is False:
+            print("Table name not valid")
+            exit()
+        elif valid_table is True:
+            my_cursor = conn.cursor()
+            my_cursor.execute(
+                "INSERT INTO " + table + " (display_name, username, last_date, last_time, reinstall_count) "
+                "VALUES (?,?,?,?,?)",
+                (display_name, username, date, time, 1))
 
 
 def find_row_entry(table, username):
     with _connect() as conn:
-        my_cursor = conn.cursor()
-        my_cursor.execute("SELECT * FROM " + table + " WHERE username = ? LIMIT 1", (username,))
-        find = my_cursor.fetchone()
-        print("find row entry function:", find)
-        return find
+        valid_table = table_validation(table)
+        if valid_table is False:
+            print("Table name not valid")
+            exit()
+        elif valid_table is True:
+            my_cursor = conn.cursor()
+            my_cursor.execute("SELECT * FROM " + table + " WHERE username = ? LIMIT 1", (username,))
+            find = my_cursor.fetchone()
+            print("find row entry function:", find)
+            return find
+        return
 
 
 # Begin Slack commands
 # Command to kick off flow
-@app.message("--helplinux")
+@app.message("--help")
 def say_hello(client, message):
     if message["channel"] == kaeley_test:
        pass
@@ -97,13 +132,13 @@ def say_hello(client, message):
                     },
                     {
                         "type": "button",
-                        "text": {"type": "plain_text", "text": "Clear tables"},
-                        "action_id": "clear_tables"
+                        "text": {"type": "plain_text", "text": "Who installed last?"},
+                        "action_id": "last_reinstall"
                     },
                     {
                         "type": "button",
-                        "text": {"type": "plain_text", "text": "Print tables"},
-                        "action_id": "print_tables"
+                        "text": {"type": "plain_text", "text": "Who's installed most?"},
+                        "action_id": "most_installed"
                     }
                 ]
             }
@@ -126,35 +161,30 @@ def action_button_click(client, body, ack, say):
     current_time = str(current_datetime.strftime("%I:%M:%S %p"))
     ######################## Open DB connection ########################
     last_install_data = last_installed(linux_reinstall_table)
-    print("last install data out of function:", last_install_data)
     ######################## last install data ########################
     if last_install_data is not None:
-        last_install_username = last_install_data[1]
-        last_install_date = last_install_data[2]
-        last_install_time = last_install_data[3]
-        last_install_count = last_install_data[4]
-    print("begin conditions")
-    if last_install_data is None: # finds none rows
-        print("finds no rows")
+        last_install_username = last_install_data[2]
+        last_install_date = last_install_data[3]
+        last_install_time = last_install_data[4]
+        last_install_count = last_install_data[5]
+    ######################## Begin conditions ########################
+    if last_install_data is None:
         create_row_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
         say(current_user_formatted + " reinstalled their operating system.")
     elif find_row_entry(table=linux_reinstall_table, username=current_user_id) is None: # current user has no entry
         create_row_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id,
                          date=today, time=current_time)
-        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was @" + last_install_username)
-    elif current_user_id != last_install_username: # current user does not match last user
-        print("current user does not match last user")
+        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was " + f"<@{last_install_username}> on " + str(last_install_date))
+    elif current_user_id != last_install_username:
         add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
-        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was @" + last_install_username)
-    elif last_install_username == current_user_id: # current user matches last user
-        if last_install_date == today: # current user matches last user if it was the same day
-            # create_row_entry(table, username, date, time)
-            print("current user matches last user if it was the same day")
+        say(current_user_formatted + " reinstalled their operating system. The last person to reinstall was " + f"<@{last_install_username}> on " + str(last_install_date))
+    elif last_install_username == current_user_id:
+        if last_install_date == today:
             add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
             say(current_user_formatted + " reinstalled their operating system." +
                 " They were also the last person to reinstall at " + str(last_install_time)
                 + ". Total install count: " + str(last_install_count + 1))
-        else: # current user matches last user if it wasn't the same day
+        else:
             print("current user matches last user if it wasn't the same day")
             add_count_to_existing_entry(table=linux_reinstall_table, display_name=current_user_display, username=current_user_id, date=today, time=current_time)
             say(current_user_formatted + " reinstalled their operating system." +
@@ -162,13 +192,47 @@ def action_button_click(client, body, ack, say):
                 + ". Total install count: " + str(last_install_count + 1))
 
 
+@app.action("Nevermind")
+def action_button_click(body, ack, say):
+    ack()
+    say(f"<@{body['user']['id']}> clicked the button in error.")
+
+
+@app.action("last_reinstall")
+def action_button_click(body, ack, say):
+    ack()
+    table = "Linux_Reinstall"
+    last_install_data = last_installed(table)
+    say(f"The last user to reinstall is <@{last_install_data[2]}> on {last_install_data[3]}")
+
+
+@app.action("most_installed")
+def action_button_click(body, ack, say):
+    ack()
+    table = "Linux_Reinstall"
+    most_install_data = most_installed(table)
+    say(f"The user who has reinstalled Linux on their machine the most is <@{most_install_data[2]}> on {most_install_data[3]}")
+
+
+@app.event("message")
+def handle_message_events(body, logger):
+    logger.info(body)
+
+
 @app.action("clear_tables")
 def action_button_click(ack):
     ack()
-    print(f"Tables were cleared")
+    table = "Linux_Reinstall"
     with _connect() as conn:
-        my_cursor = conn.cursor()
-        my_cursor.execute("DELETE FROM Linux_Reinstall")
+        valid_table = table_validation(table)
+        if valid_table is False:
+            print("Table name not valid")
+            exit()
+        elif valid_table is True:
+            my_cursor = conn.cursor()
+            my_cursor.execute("DELETE FROM " + table)
+        return
+
 
 @app.action("print_tables")
 def action_button_click(ack):
@@ -177,20 +241,7 @@ def action_button_click(ack):
         my_cursor = conn.cursor()
         my_cursor.execute("SELECT FROM sqlite_master WHERE type='table'")
         tables = my_cursor.fetchall()
-    print("tables in the database")
-    for table in tables:
-        print(table)
-
-@app.action("Nevermind")
-def action_button_click(body, ack, say):
-    ack()
-    print(ack())
-    say(f"<@{body['user']['id']}> clicked the button in error.")
-
-
-@app.event("message")
-def handle_message_events(body, logger):
-    logger.info(body)
+        return tables
 
 
 if __name__ == "__main__":
